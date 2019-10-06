@@ -47,7 +47,7 @@ contract SideChannelAttack {
     mapping (address => uint) user_loan;
     mapping (address => uint) user_money;
     mapping (address => uint) num_trans;
-    mapping (address => uint) transaction_value;
+    mapping (address => uint) hold_collateral;
    
     constructor() public{
         etherium_amount = 0;
@@ -83,18 +83,30 @@ contract SideChannelAttack {
         user_money[msg.sender] += money_added;
         user_accumulate[msg.sender].reset();
         
-        uint loan_added = the_amount_balance.comp_amt(loan_accumulate[msg.sender].get_timestamp(), user_loan[msg.sender], interest_rate_borrow);
-        user_loan[msg.sender] += loan_added;
-        loan_accumulate[msg.sender].reset();
-        
-        if(user_money[msg.sender] < transaction_value[msg.sender]){
-            SGP.AddingSupply(user_money[msg.sender]);
-            user_money[msg.sender] = 0;
+        loan_accumulate[msg.sender].stop_time();
+        if(loan_accumulate[msg.sender].get_timestamp() > 1 days){
+            
+            SGP.AddingSupply(hold_collateral[msg.sender]);
+            hold_collateral[msg.sender] = 0;
             user_loan[msg.sender] = 0;
             num_trans[msg.sender] -= 2;
             if(num_trans[msg.sender]<0) num_trans[msg.sender] = 0;
             return (false, USD_to_eth(user_money[msg.sender]), USD_to_eth(user_loan[msg.sender]));
+            
         }
+        uint loan_added = the_amount_balance.comp_amt(loan_accumulate[msg.sender].get_timestamp(), user_loan[msg.sender], interest_rate_borrow);
+        user_loan[msg.sender] += loan_added;
+        loan_accumulate[msg.sender].reset();
+        
+        
+        // if(user_money[msg.sender] < transaction_value[msg.sender]){
+        //     SGP.AddingSupply(user_money[msg.sender]);
+        //     user_money[msg.sender] = 0;
+        //     user_loan[msg.sender] = 0;
+        //     num_trans[msg.sender] -= 2;
+        //     if(num_trans[msg.sender]<0) num_trans[msg.sender] = 0;
+        //     return (false, USD_to_eth(user_money[msg.sender]), USD_to_eth(user_loan[msg.sender]));
+        // }
         
         user_accumulate[msg.sender].start_time();
         if(user_loan[msg.sender]>0) loan_accumulate[msg.sender].start_time();
@@ -140,8 +152,9 @@ contract SideChannelAttack {
         require(user_money[msg.sender] >= deposit_needed, "Not enough money deposited to make this transaction");
         require(user_loan[msg.sender] == 0, "A loan is already pending!");
         require(etherium_amount >= amount_in_ether, "Not enough etherium in the system");
-        transaction_value[msg.sender] = deposit_needed;
         user_loan[msg.sender] += amount_in_dollars;
+        hold_collateral[msg.sender] = deposit_needed;
+        user_money[msg.sender] -= deposit_needed;
         loan_accumulate[msg.sender].start_time();
         
         return true;
@@ -160,7 +173,8 @@ contract SideChannelAttack {
         num_trans[msg.sender]++;
         user_loan[msg.sender] += amount_in_dollars;
         etherium_amount += amount_in_ether;
-        transaction_value[msg.sender] = 0;
+        user_money[msg.sender] += hold_collateral[msg.sender];
+        hold_collateral[msg.sender] = 0;
         
         return true;
     }
